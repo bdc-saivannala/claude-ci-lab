@@ -1,0 +1,28 @@
+name: deploy
+on:
+  push:
+    branches: [main]                                         # runs after a PR is merged
+concurrency:
+  group: deploy-production                                   # one deploy at a time
+  cancel-in-progress: false                                  # never cancel a deploy halfway
+permissions:
+  contents: read                                             # read-only token
+jobs:
+  release-notes:
+    if: github.event.before != '0000000000000000000000000000000000000000'   # skip the push that creates main
+    runs-on: ubuntu-latest                                   # hosted Linux runner
+    continue-on-error: true                                  # 6.1 fail-open: notes never block a deploy
+    steps:
+      - uses: actions/checkout@v4                            # fetch the code
+        with:
+          fetch-depth: 2                                     # this commit and its parent
+      - run: npm install -g @anthropic-ai/claude-code        # install the CLI
+      - run: git diff HEAD~1 | claude -p "Write 3 short release-note bullets for this diff." --max-turns 3 >> "$GITHUB_STEP_SUMMARY"   # 5.1 post-merge docs
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # key from secrets
+  deploy:
+    needs: release-notes                                     # run after the notes job
+    runs-on: ubuntu-latest                                   # hosted Linux runner
+    environment: production                                  # waits for a human approval
+    steps:
+      - run: echo "Deploying ${GITHUB_SHA::7} to production (simulated)" | tee -a "$GITHUB_STEP_SUMMARY"   # dummy deploy

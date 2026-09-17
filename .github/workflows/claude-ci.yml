@@ -1,0 +1,37 @@
+name: claude-ci
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]           # 3.2 new PRs and new pushes
+concurrency:
+  group: claude-ci-${{ github.event.pull_request.number }}   # 3.4 one run per PR
+  cancel-in-progress: true                                   # a new push cancels the stale run
+permissions:
+  contents: read                                             # 4.2 read the code
+  pull-requests: write                                       # post review comments
+  id-token: write                                            # OIDC token used by the Claude GitHub App
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest                                   # hosted Linux runner
+    timeout-minutes: 10                                      # 1.5 job-level ceiling
+    steps:
+      - uses: actions/checkout@v4                            # fetch the code
+      - uses: anthropics/claude-code-action@v1               # 3.1 official action, needs the Claude GitHub App
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # 3.5 key from secrets
+          prompt: |
+            REPO: ${{ github.repository }} PR NUMBER: ${{ github.event.pull_request.number }}
+            Review this PR against CLAUDE.md. Post each finding as an inline comment.
+          claude_args: --max-turns 10 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+  claude-gate:
+    runs-on: ubuntu-latest                                   # hosted Linux runner
+    timeout-minutes: 10                                      # 1.5 job-level ceiling
+    steps:
+      - uses: actions/checkout@v4                            # fetch the code
+        with:
+          fetch-depth: 0                                     # full history for the base...head diff
+      - run: npm install -g @anthropic-ai/claude-code        # install the CLI on the runner
+      - run: bash scripts/ci_review.sh                       # same script as Lab 4: exits 1 on critical findings
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # key from secrets
+          BASE_BRANCH: ${{ github.base_ref }}                # diff against the PR's target branch
