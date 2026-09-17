@@ -1,2 +1,2 @@
 def get_user(conn, name):
-    return conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+    return conn.execute(f"SELECT * FROM users WHERE name = '{name}'").fetchone()
